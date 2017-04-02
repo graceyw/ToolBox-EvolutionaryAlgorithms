@@ -1,15 +1,14 @@
-"""
-Evolutionary algorithm, attempts to evolve a given message string.
+"""Software Design
+Evolutionary Algorithms Toolbox
+Gracey Wilson with help from peer Connnor Novak
 
+Evolutionary algorithm, attempts to evolve a given message string.
 Uses the DEAP (Distributed Evolutionary Algorithms in Python) framework,
 http://deap.readthedocs.org
-
 Usage:
     python evolve_text.py [goal_message]
-
 Full instructions are at:
-https://sites.google.com/site/sd15spring/home/project-toolbox/evolutionary-algorithms
-"""
+https://sites.google.com/site/sd15spring/home/project-toolbox/evolutionary-algorithms"""
 
 import random
 import string
@@ -29,7 +28,7 @@ from deap import tools
 VALID_CHARS = string.ascii_uppercase + " "
 
 # Control whether all Messages are printed as they are evaluated
-VERBOSE = True
+VERBOSE = False
 
 
 # -----------------------------------------------------------------------------
@@ -92,8 +91,52 @@ class Message(list):
 # Genetic operators
 # -----------------------------------------------------------------------------
 
-# TODO: Implement levenshtein_distance function (see Day 9 in-class exercises)
-# HINT: Now would be a great time to implement memoization if you haven't
+def memoize_levenshtein(func):
+    cache = {}
+
+    def decorated_function(*args):
+        if args in cache:
+            return cache[args]
+        else:
+            cache[args] = func(*args)
+            return cache[args]
+    return decorated_function
+
+@memoize_levenshtein
+def levenshtein_distance(s1,s2):
+    '''Given two strings s1 and s2, returns the minimum number of additions,
+    deletions or replacements necessary to turn s1 into s2 (or s2 into s1)
+    (aka the "levenshtein distance between the two strings").
+
+    >>> levenshtein_distance('','string')
+    6
+    >>> levenshtein_distance('string','')
+    6
+    >>> levenshtein_distance('this','that')
+    2
+    >>> levenshtein_distance('Hello, friends!','Goodbye, sanity.')
+    16
+    '''
+
+    l1 = len(s1)
+    l2 = len(s2)
+
+    # Base cases
+    if l1 == 0:
+        return l2
+    if l2 == 0:
+        return l1
+
+    # Sets
+    if s1[l1-1] == s2[l2-1]:
+        cost = 0
+    else:
+        cost = 1
+
+    # Check:                         remove letter from str1,                       remove letter from str2,                        remove letter from both
+    dist = min([levenshtein_distance(s1[0:-1],s2) + 1, levenshtein_distance(s1,s2[0:-1]) + 1, levenshtein_distance(s1[0:-1],s2[0:-1]) + cost])
+    return dist
+
 
 def evaluate_text(message, goal_text, verbose=VERBOSE):
     """
@@ -118,18 +161,30 @@ def mutate_text(message, prob_ins=0.05, prob_del=0.05, prob_sub=0.05):
         Deletion:       Delete one of the characters from the Message
         Substitution:   Replace one character of the Message with a random
                         (legal) character
+    >>> mutate_text(Message(['A','A','A','A','A','A','A','A','A','A']),1,0,0)
+    WARN: Allows view of output, does not pass test
+    >>> mutate_text(Message(['A','B','C','D','E','F','G','H','I','J']),0,1,0)
+    WARN: Allows view of output, does not pass test
+    >>> mutate_text(Message(['A','A','A','A','A','A','A','A','A','A']),0,0,1)
+    WARN: Allows view of output, does not pass test
     """
 
     if random.random() < prob_ins:
-        # TODO: Implement insertion-type mutation
-        pass
+        insert_pos = random.randint(0,len(message))
+        insert_char = VALID_CHARS[random.randint(0,len(VALID_CHARS)-1)]
+        message.insert(insert_pos,insert_char)
 
-    # TODO: Also implement deletion and substitution mutations
-    # HINT: Message objects inherit from list, so they also inherit
-    #       useful list methods
-    # HINT: You probably want to use the VALID_CHARS global variable
+    if random.random() < prob_del:
+        del_pos = random.randint(0,len(message)-1)
+        message.pop(del_pos)
 
-    return (message, )   # Length 1 tuple, required by DEAP
+    if random.random() < prob_sub:
+        sub_pos = random.randint(0,len(message)-1)
+        sub_char = VALID_CHARS[random.randint(0,len(VALID_CHARS)-1)]
+
+        message[sub_pos] = sub_char
+
+    return (message, ) # Length 1 tuple, required by DEAP
 
 
 # -----------------------------------------------------------------------------
@@ -158,6 +213,27 @@ def get_toolbox(text):
     #   toolbox.register("mutate", mutate_text, prob_sub=0.18)
 
     return toolbox
+
+def two_pt_cross(string1, string2):
+    """DOCSTRING:
+        Takes as input two Messages to be crossed via two point crossover and
+        returns two Messages with the crossover implemented
+        >>> two_pt_cross('aaaaaaaaaa','bbbbbbbbbbcc')
+        WARN: Allows view of output, does not pass test
+        """
+
+    length = len(min([string1,string2],key=len))
+    t1 = random.randint(0,length)
+    t2 = random.randint(0,length)
+    if t1 > t2:
+        pt1 = t2
+        pt2 = t1
+    else:
+        pt1 = t1
+        pt2 = t2
+    str1 = string1[0:pt1] + string2[pt1:pt2] + string1[pt2:-1] + [string1[-1]]
+    str2 = string2[0:pt1] + string1[pt1:pt2] + string2[pt2:-1] + [string2[-1]]
+    return Message(str1),Message(str2)
 
 
 def evolve_string(text):
